@@ -97,12 +97,17 @@ def get_stats(user_id):
 TRANSLATIONS = {
     "ar": {
         "welcome": "👋 مرحباً {name}!\n\n🤖 **بوت PDF الذكي Pro**\n\n📤 أرسل: نص | صور | ملف TXT | ملف Word\n\n🎨 اختر القالب والجودة من الإعدادات",
-        "processing": "⏳ جاري إنشاء PDF...",
-        "processing_album": "⏳ معالجة {count} صور...",
-        "success": "📄 تم إنشاء PDF بنجاح!",
-        "success_album": "📄 {count} صور في PDF واحد",
-        "error": "❌ خطأ: {error}",
-        "not_member": "⚠️ اشترك في {channel} أولاً للاستخدام",
+        "received": "📥 **تم استلام طلبك!**\n⏳ جاري المعالجة...",
+        "processing": "🔄 جاري تحويل النص إلى PDF...\n⏱️ يرجى الانتظار",
+        "processing_album": "🔄 جاري معالجة {count} صور...\n⏱️ يرجى الانتظار",
+        "processing_step1": "📝 تحليل المحتوى...",
+        "processing_step2": "🎨 تطبيق التصميم...",
+        "processing_step3": "📄 إنشاء ملف PDF...",
+        "uploading": "📤 جاري رفع الملف إليك...",
+        "success": "✅ **تم بنجاح!**\n📄 ملف PDF جاهز للتحميل",
+        "success_album": "✅ **تم بنجاح!**\n📄 {count} صور في PDF واحد",
+        "error": "❌ **حدث خطأ**\n{error}\n\n🔄 يرجى المحاولة مرة أخرى",
+        "not_member": "🔒 **الاشتراك مطلوب**\n\n📢 اشترك في {channel} أولاً\n✅ ثم عد وأرسل /start",
         "title": "مستند PDF",
         "title_album": "ألبوم الصور",
         "watermark": "© PDF Bot Pro | {channel}",
@@ -115,7 +120,7 @@ TRANSLATIONS = {
         "quality_changed": "✅ تم تغيير الجودة إلى: {quality}",
         "stats": "📊 **إحصائياتك**\n\n📄 ملفات PDF: {pdfs}\n📝 نصوص: {texts}\n🖼️ صور: {images}\n📁 ملفات: {files}",
         "help": "📖 **المساعدة**\n\n/start - بدء البوت\n/settings - الإعدادات\n/stats - إحصائياتك\n/help - المساعدة\n\n📤 **يمكنك إرسال:**\n• نص عادي\n• صورة أو مجموعة صور\n• ملف TXT\n• ملف Word (.docx)",
-        "file_received": "📁 تم استلام الملف، جاري المعالجة...",
+        "file_received": "� **تم استلام الملف!**\n📁 {filename}\n⏳ جاري التحويل...",
         "docx_not_supported": "⚠️ دعم ملفات Word غير متوفر، يرجى تثبيت python-docx",
         "classic": "🎨 كلاسيكي",
         "modern": "✨ عصري",
@@ -126,12 +131,17 @@ TRANSLATIONS = {
     },
     "en": {
         "welcome": "👋 Hello {name}!\n\n🤖 **AI PDF Bot Pro**\n\n📤 Send: Text | Photos | TXT file | Word file\n\n🎨 Choose template and quality in settings",
-        "processing": "⏳ Creating PDF...",
-        "processing_album": "⏳ Processing {count} images...",
-        "success": "📄 PDF created successfully!",
-        "success_album": "📄 {count} images in one PDF",
-        "error": "❌ Error: {error}",
-        "not_member": "⚠️ Join {channel} first to use",
+        "received": "📥 **Request received!**\n⏳ Processing...",
+        "processing": "🔄 Converting text to PDF...\n⏱️ Please wait",
+        "processing_album": "🔄 Processing {count} images...\n⏱️ Please wait",
+        "processing_step1": "📝 Analyzing content...",
+        "processing_step2": "🎨 Applying design...",
+        "processing_step3": "📄 Creating PDF file...",
+        "uploading": "📤 Uploading file to you...",
+        "success": "✅ **Success!**\n📄 PDF file is ready to download",
+        "success_album": "✅ **Success!**\n📄 {count} images in one PDF",
+        "error": "❌ **Error occurred**\n{error}\n\n🔄 Please try again",
+        "not_member": "🔒 **Subscription required**\n\n📢 Join {channel} first\n✅ Then come back and send /start",
         "title": "PDF Document",
         "title_album": "Image Album",
         "watermark": "© PDF Bot Pro | {channel}",
@@ -144,7 +154,7 @@ TRANSLATIONS = {
         "quality_changed": "✅ Quality changed to: {quality}",
         "stats": "📊 **Your Statistics**\n\n📄 PDFs: {pdfs}\n📝 Texts: {texts}\n🖼️ Images: {images}\n📁 Files: {files}",
         "help": "📖 **Help**\n\n/start - Start bot\n/settings - Settings\n/stats - Your stats\n/help - Help\n\n📤 **You can send:**\n• Plain text\n• Photo or album\n• TXT file\n• Word file (.docx)",
-        "file_received": "📁 File received, processing...",
+        "file_received": "� **File received!**\n📁 {filename}\n⏳ Converting...",
         "docx_not_supported": "⚠️ Word file support not available, please install python-docx",
         "classic": "🎨 Classic",
         "modern": "✨ Modern",
@@ -377,7 +387,7 @@ async def check_membership(user_id, context):
         return is_member
     except Exception as e:
         logger.error(f"❌ Membership check error: {e}")
-        return True
+        return False  # رفض المستخدم إذا حدث خطأ في الفحص
 
 # ============ Ollama ============
 def call_ollama(prompt, system=""):
@@ -677,6 +687,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     lang = user.language_code or 'en'
     loc = Localization(lang)
+
+    if not await check_membership(user.id, context):
+        await update.message.reply_text(loc.get('not_member', channel=TARGET_CHANNEL))
+        return
+
     await update.message.reply_text(loc.get('help'), parse_mode='Markdown')
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -686,6 +701,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = query.from_user
     lang = user.language_code or 'en'
     loc = Localization(lang)
+
+    # فحص العضوية عند الضغط على أي زر
+    if not await check_membership(user.id, context):
+        await query.edit_message_text(loc.get('not_member', channel=TARGET_CHANNEL))
+        return
+
     data = query.data
 
     if data == "menu_template":
@@ -739,23 +760,45 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await acquire_request_slot()
-    processing_msg = await update.message.reply_text(loc.get('processing'))
+    
+    # إظهار حالة الكتابة للمستخدم
+    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    
+    # رسالة الاستلام
+    processing_msg = await update.message.reply_text(loc.get('received'), parse_mode='Markdown')
 
     try:
+        # المرحلة 1: تحليل المحتوى
+        await asyncio.sleep(0.5)
+        await processing_msg.edit_text(loc.get('processing_step1'), parse_mode='Markdown')
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+        
+        # المرحلة 2: تطبيق التصميم
+        await asyncio.sleep(0.5)
+        await processing_msg.edit_text(loc.get('processing_step2'), parse_mode='Markdown')
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+        
+        # المرحلة 3: إنشاء PDF
+        await processing_msg.edit_text(loc.get('processing_step3'), parse_mode='Markdown')
         pdf_path = create_pdf_text(text, str(chat_id), lang, user.id)
         update_stats(user.id, 'texts')
         update_stats(user.id, 'pdfs')
 
+        # المرحلة 4: رفع الملف
+        await processing_msg.edit_text(loc.get('uploading'), parse_mode='Markdown')
+        await context.bot.send_chat_action(chat_id=chat_id, action="upload_document")
+        
         with open(pdf_path, 'rb') as f:
             await update.message.reply_document(
                 document=f,
                 caption=loc.get('success'),
-                filename=f"Document_{int(time.time())}.pdf"
+                filename=f"Document_{int(time.time())}.pdf",
+                parse_mode='Markdown'
             )
         await processing_msg.delete()
         threading.Thread(target=cleanup_file, args=(pdf_path, 120)).start()
     except Exception as e:
-        await processing_msg.edit_text(loc.get('error', error=str(e)))
+        await processing_msg.edit_text(loc.get('error', error=str(e)), parse_mode='Markdown')
     finally:
         await release_request_slot()
 
@@ -867,13 +910,25 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_name = document.file_name.lower()
 
     await acquire_request_slot()
-    processing_msg = await update.message.reply_text(loc.get('file_received'))
+    
+    # إظهار حالة الكتابة للمستخدم
+    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    
+    # رسالة استلام الملف مع اسم الملف
+    processing_msg = await update.message.reply_text(
+        loc.get('file_received', filename=document.file_name), 
+        parse_mode='Markdown'
+    )
 
     try:
         file = await document.get_file()
         file_path = os.path.join(PDF_DIR, f"file_{chat_id}_{int(time.time())}_{document.file_name}")
         await file.download_to_drive(file_path)
 
+        # المرحلة 1: تحليل المحتوى
+        await processing_msg.edit_text(loc.get('processing_step1'), parse_mode='Markdown')
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+        
         content = ""
         if file_name.endswith('.txt'):
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -885,28 +940,40 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             doc = Document(file_path)
             content = '\n'.join([p.text for p in doc.paragraphs])
         else:
-            await processing_msg.edit_text(loc.get('error', error="Unsupported file type"))
+            await processing_msg.edit_text(loc.get('error', error="Unsupported file type"), parse_mode='Markdown')
             return
 
         if content.strip():
+            # المرحلة 2: تطبيق التصميم
+            await processing_msg.edit_text(loc.get('processing_step2'), parse_mode='Markdown')
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+            await asyncio.sleep(0.3)
+            
+            # المرحلة 3: إنشاء PDF
+            await processing_msg.edit_text(loc.get('processing_step3'), parse_mode='Markdown')
             pdf_path = create_pdf_text(content, str(chat_id), lang, user.id)
             update_stats(user.id, 'files')
             update_stats(user.id, 'pdfs')
 
+            # المرحلة 4: رفع الملف
+            await processing_msg.edit_text(loc.get('uploading'), parse_mode='Markdown')
+            await context.bot.send_chat_action(chat_id=chat_id, action="upload_document")
+            
             with open(pdf_path, 'rb') as f:
                 await update.message.reply_document(
                     document=f,
                     caption=loc.get('success'),
-                    filename=f"Converted_{int(time.time())}.pdf"
+                    filename=f"Converted_{int(time.time())}.pdf",
+                    parse_mode='Markdown'
                 )
             await processing_msg.delete()
             threading.Thread(target=cleanup_file, args=(pdf_path, 120)).start()
         else:
-            await processing_msg.edit_text(loc.get('error', error="Empty file"))
+            await processing_msg.edit_text(loc.get('error', error="Empty file"), parse_mode='Markdown')
 
         threading.Thread(target=cleanup_file, args=(file_path, 10)).start()
     except Exception as e:
-        await processing_msg.edit_text(loc.get('error', error=str(e)))
+        await processing_msg.edit_text(loc.get('error', error=str(e)), parse_mode='Markdown')
     finally:
         await release_request_slot()
 
@@ -934,3 +1001,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
