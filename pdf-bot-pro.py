@@ -860,7 +860,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg_id = update.message.message_id
     user_id = user.id
 
-    if not await check_membership(user_id, context):
+    if not await check_membership(user_id, context, TARGET_CHANNEL):
         await update.message.reply_text(loc.get('not_member', channel=TARGET_CHANNEL))
         return
 
@@ -952,7 +952,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     loc = Localization(lang)
     chat_id = update.effective_chat.id
 
-    if not await check_membership(user.id, context):
+    if not await check_membership(user.id, context, TARGET_CHANNEL):
         await update.message.reply_text(loc.get('not_member', channel=TARGET_CHANNEL))
         return
 
