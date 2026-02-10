@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """
-PDF Bot Pro - Ultimate Version 2.0
+PDF Bot Pro - Ultimate Version 2.1
 يدعم: نصوص | صورة واحدة | مجموعة صور (Album) | TXT | DOCX → PDF
 مع قوالب متعددة وأزرار تفاعلية ودعم 6 لغات
+متوافق مع bothost.ru
 """
 
 import os
 import sys
 import json
-import requests
 import logging
-import threading
 import time
 import asyncio
-import io
 from datetime import datetime
 from pathlib import Path
 from deep_translator import GoogleTranslator
@@ -41,11 +39,18 @@ except ImportError:
 # ============ إعدادات ============
 TOKEN = os.getenv("BOT_TOKEN")
 TARGET_CHANNEL = os.getenv("TARGET_CHANNEL", "@medbibliotekaa")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-MODEL = os.getenv("MODEL", "llama3.2")
-PDF_DIR = "/tmp/pdf-bot-pro"
+
+# حدود المدخلات
+MAX_TEXT_LENGTH = 50000
+MAX_ALBUM_IMAGES = 20
+
+# المسار الأساسي للمشروع
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PDF_DIR = os.path.join(BASE_DIR, "temp_files")
+DATA_DIR = os.path.join(BASE_DIR, "data")
 
 os.makedirs(PDF_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -55,43 +60,54 @@ logger = logging.getLogger(__name__)
 
 # ============ نظام إدارة الطلبات المتزامنة ============
 MAX_CONCURRENT_REQUESTS = 10
-request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-active_requests = 0
-request_lock = asyncio.Lock()
+request_semaphore = None  # يتم إنشاؤه داخل main()
 
 async def acquire_request_slot():
     """الحصول على مكان في طابور التنفيذ"""
-    global active_requests
-    async with request_lock:
-        active_requests += 1
-        logger.info(f"📥 طلب جديد - الطلبات النشطة: {active_requests}")
-    await request_semaphore.acquire()
+    if request_semaphore:
+        await request_semaphore.acquire()
 
 async def release_request_slot():
     """تحرير مكان في طابور التنفيذ"""
-    global active_requests
-    request_semaphore.release()
-    async with request_lock:
-        active_requests -= 1
-        logger.info(f"📤 انتهى طلب - الطلبات النشطة: {active_requests}")
+    if request_semaphore:
+        request_semaphore.release()
+
+# ============ تخزين البيانات (JSON) ============
+STATS_FILE = os.path.join(DATA_DIR, "user_stats.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
+
+def _load_json(filepath):
+    try:
+        if os.path.exists(filepath):
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading {filepath}: {e}")
+    return {}
+
+def _save_json(filepath, data):
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Error saving {filepath}: {e}")
 
 # ============ إحصائيات المستخدمين ============
-user_stats = {}
+user_stats = _load_json(STATS_FILE)
 
 def update_stats(user_id, action_type):
-    if user_id not in user_stats:
-        user_stats[user_id] = {
-            'pdfs': 0,
-            'texts': 0,
-            'images': 0,
-            'files': 0,
+    uid = str(user_id)
+    if uid not in user_stats:
+        user_stats[uid] = {
+            'pdfs': 0, 'texts': 0, 'images': 0, 'files': 0,
             'joined': datetime.now().isoformat()
         }
-    user_stats[user_id][action_type] = user_stats[user_id].get(action_type, 0) + 1
+    user_stats[uid][action_type] = user_stats[uid].get(action_type, 0) + 1
+    _save_json(STATS_FILE, user_stats)
 
 def get_stats(user_id):
     return user_stats.get(
-        user_id,
+        str(user_id),
         {'pdfs': 0, 'texts': 0, 'images': 0, 'files': 0}
     )
 
@@ -114,7 +130,6 @@ TRANSLATIONS = {
         "title_album": "ألبوم الصور",
         "watermark": "© PDF Bot Pro | {channel}",
         "footer": "تم الإنشاء: {date}",
-        "enhance_prompt": "حسّن هذا النص بالعربية واجعله أكثر وضوحاً",
         "settings": "⚙️ **الإعدادات**\n\nاختر ما تريد تعديله:",
         "template_select": "🎨 اختر قالب التصميم:",
         "quality_select": "📊 اختر جودة PDF:",
@@ -129,7 +144,9 @@ TRANSLATIONS = {
         "dark": "🌙 داكن",
         "high": "🔷 عالية",
         "medium": "🔶 متوسطة",
-        "low": "🔸 منخفضة"
+        "low": "🔸 منخفضة",
+        "text_too_long": "❌ **النص طويل جداً**\nالحد الأقصى: {max} حرف",
+        "album_too_large": "❌ **عدد الصور كثير جداً**\nالحد الأقصى: {max} صورة"
     },
     "en": {
         "welcome": "👋 Hello {name}!\n\n🤖 **AI PDF Bot Pro**\n\n📤 Send: Text | Photos | TXT file | Word file\n\n🎨 Choose template and quality in settings",
@@ -148,7 +165,6 @@ TRANSLATIONS = {
         "title_album": "Image Album",
         "watermark": "© PDF Bot Pro | {channel}",
         "footer": "Generated: {date}",
-        "enhance_prompt": "Improve this text professionally and make it clearer",
         "settings": "⚙️ **Settings**\n\nChoose what to modify:",
         "template_select": "🎨 Choose design template:",
         "quality_select": "📊 Choose PDF quality:",
@@ -163,12 +179,19 @@ TRANSLATIONS = {
         "dark": "🌙 Dark",
         "high": "🔷 High",
         "medium": "🔶 Medium",
-        "low": "🔸 Low"
+        "low": "🔸 Low",
+        "text_too_long": "❌ **Text is too long**\nMax: {max} characters",
+        "album_too_large": "❌ **Too many images**\nMax: {max} images"
     },
     "ru": {
         "welcome": "👋 Привет {name}!\n\n🤖 **AI PDF Бот Pro**\n\n📤 Отправьте: Текст | Фото | TXT | Word\n\n🎨 Выберите шаблон и качество в настройках",
+        "received": "📥 **Запрос получен!**\n⏳ Обработка...",
         "processing": "⏳ Создание PDF...",
         "processing_album": "⏳ Обработка {count} изображений...",
+        "processing_step1": "📝 Анализ содержимого...",
+        "processing_step2": "🎨 Применение дизайна...",
+        "processing_step3": "📄 Создание PDF файла...",
+        "uploading": "📤 Загрузка файла...",
         "success": "📄 PDF создан успешно!",
         "success_album": "📄 {count} изображений в одном PDF",
         "error": "❌ Ошибка: {error}",
@@ -177,7 +200,6 @@ TRANSLATIONS = {
         "title_album": "Фотоальбом",
         "watermark": "© PDF Bot Pro | {channel}",
         "footer": "Создано: {date}",
-        "enhance_prompt": "Улучши этот текст профессионально на русском языке",
         "settings": "⚙️ **Настройки**\n\nВыберите что изменить:",
         "template_select": "🎨 Выберите шаблон:",
         "quality_select": "📊 Выберите качество PDF:",
@@ -192,12 +214,19 @@ TRANSLATIONS = {
         "dark": "🌙 Тёмный",
         "high": "🔷 Высокое",
         "medium": "🔶 Среднее",
-        "low": "🔸 Низкое"
+        "low": "🔸 Низкое",
+        "text_too_long": "❌ **Текст слишком длинный**\nМакс: {max} символов",
+        "album_too_large": "❌ **Слишком много изображений**\nМакс: {max} изображений"
     },
     "tr": {
         "welcome": "👋 Merhaba {name}!\n\n🤖 **AI PDF Bot Pro**\n\n📤 Gönder: Metin | Fotoğraf | TXT | Word\n\n🎨 Ayarlardan şablon ve kalite seçin",
+        "received": "📥 **İstek alındı!**\n⏳ İşleniyor...",
         "processing": "⏳ PDF oluşturuluyor...",
         "processing_album": "⏳ {count} resim işleniyor...",
+        "processing_step1": "📝 İçerik analiz ediliyor...",
+        "processing_step2": "🎨 Tasarım uygulanıyor...",
+        "processing_step3": "📄 PDF dosyası oluşturuluyor...",
+        "uploading": "📤 Dosya yükleniyor...",
         "success": "📄 PDF başarıyla oluşturuldu!",
         "success_album": "📄 {count} resim tek PDF'de",
         "error": "❌ Hata: {error}",
@@ -206,7 +235,6 @@ TRANSLATIONS = {
         "title_album": "Fotoğraf Albümü",
         "watermark": "© PDF Bot Pro | {channel}",
         "footer": "Oluşturuldu: {date}",
-        "enhance_prompt": "Bu metni Türkçe olarak profesyonelce geliştir",
         "settings": "⚙️ **Ayarlar**\n\nDeğiştirmek istediğinizi seçin:",
         "template_select": "🎨 Tasarım şablonu seçin:",
         "quality_select": "📊 PDF kalitesi seçin:",
@@ -221,12 +249,19 @@ TRANSLATIONS = {
         "dark": "🌙 Karanlık",
         "high": "🔷 Yüksek",
         "medium": "🔶 Orta",
-        "low": "🔸 Düşük"
+        "low": "🔸 Düşük",
+        "text_too_long": "❌ **Metin çok uzun**\nMaks: {max} karakter",
+        "album_too_large": "❌ **Çok fazla resim**\nMaks: {max} resim"
     },
     "fr": {
         "welcome": "👋 Bonjour {name}!\n\n🤖 **AI PDF Bot Pro**\n\n📤 Envoyez: Texte | Photos | TXT | Word\n\n🎨 Choisissez le modèle dans les paramètres",
+        "received": "📥 **Reçu!**\n⏳ Traitement en cours...",
         "processing": "⏳ Création du PDF...",
         "processing_album": "⏳ Traitement de {count} images...",
+        "processing_step1": "📝 Analyse du contenu...",
+        "processing_step2": "🎨 Application du design...",
+        "processing_step3": "📄 Création du fichier PDF...",
+        "uploading": "📤 Téléchargement du fichier...",
         "success": "📄 PDF créé avec succès!",
         "success_album": "📄 {count} images dans un PDF",
         "error": "❌ Erreur: {error}",
@@ -235,7 +270,6 @@ TRANSLATIONS = {
         "title_album": "Album Photo",
         "watermark": "© PDF Bot Pro | {channel}",
         "footer": "Créé le: {date}",
-        "enhance_prompt": "Améliore ce texte professionnellement en français",
         "settings": "⚙️ **Paramètres**\n\nChoisissez ce que vous voulez modifier:",
         "template_select": "🎨 Choisissez le modèle:",
         "quality_select": "📊 Choisissez la qualité PDF:",
@@ -250,12 +284,19 @@ TRANSLATIONS = {
         "dark": "🌙 Sombre",
         "high": "🔷 Haute",
         "medium": "🔶 Moyenne",
-        "low": "🔸 Basse"
+        "low": "🔸 Basse",
+        "text_too_long": "❌ **Texte trop long**\nMax: {max} caractères",
+        "album_too_large": "❌ **Trop d'images**\nMax: {max} images"
     },
     "es": {
         "welcome": "👋 ¡Hola {name}!\n\n🤖 **AI PDF Bot Pro**\n\n📤 Envía: Texto | Fotos | TXT | Word\n\n🎨 Elige plantilla y calidad en ajustes",
+        "received": "📥 **¡Solicitud recibida!**\n⏳ Procesando...",
         "processing": "⏳ Creando PDF...",
         "processing_album": "⏳ Procesando {count} imágenes...",
+        "processing_step1": "📝 Analizando contenido...",
+        "processing_step2": "🎨 Aplicando diseño...",
+        "processing_step3": "📄 Creando archivo PDF...",
+        "uploading": "📤 Subiendo archivo...",
         "success": "📄 ¡PDF creado con éxito!",
         "success_album": "📄 {count} imágenes en un PDF",
         "error": "❌ Error: {error}",
@@ -264,13 +305,12 @@ TRANSLATIONS = {
         "title_album": "Álbum de Fotos",
         "watermark": "© PDF Bot Pro | {channel}",
         "footer": "Creado: {date}",
-        "enhance_prompt": "Mejora este texto profesionalmente en español",
         "settings": "⚙️ **Ajustes**\n\nElige qué modificar:",
         "template_select": "🎨 Elige plantilla:",
         "quality_select": "📊 Elige calidad PDF:",
         "template_changed": "✅ Plantilla cambiada a: {template}",
         "quality_changed": "✅ Calidad cambiada a: {quality}",
-        "stats": "📊 **Tus Estadísticas**\n\n📄 PDFs: {pdfs}\n📝 Textes: {texts}\n🖼️ Imágenes: {images}\n📁 Archivos: {files}",
+        "stats": "📊 **Tus Estadísticas**\n\n📄 PDFs: {pdfs}\n📝 Textos: {texts}\n🖼️ Imágenes: {images}\n📁 Archivos: {files}",
         "help": "📖 **Ayuda**\n\n/start - Iniciar\n/settings - Ajustes\n/stats - Estadísticas\n/help - Ayuda",
         "file_received": "📁 Archivo recibido, procesando...",
         "docx_not_supported": "⚠️ Soporte Word no disponible",
@@ -279,22 +319,28 @@ TRANSLATIONS = {
         "dark": "🌙 Oscuro",
         "high": "🔷 Alta",
         "medium": "🔶 Media",
-        "low": "🔸 Baja"
+        "low": "🔸 Baja",
+        "text_too_long": "❌ **Texto demasiado largo**\nMáx: {max} caracteres",
+        "album_too_large": "❌ **Demasiadas imágenes**\nMáx: {max} imágenes"
     }
 }
 
 # ============ إعدادات المستخدم ============
-user_settings = {}
+user_settings = _load_json(SETTINGS_FILE)
 
 def get_user_settings(user_id):
-    if user_id not in user_settings:
-        user_settings[user_id] = {'template': 'modern', 'quality': 'high'}
-    return user_settings[user_id]
+    uid = str(user_id)
+    if uid not in user_settings:
+        user_settings[uid] = {'template': 'modern', 'quality': 'high'}
+        _save_json(SETTINGS_FILE, user_settings)
+    return user_settings[uid]
 
 def set_user_setting(user_id, key, value):
-    if user_id not in user_settings:
-        user_settings[user_id] = {'template': 'modern', 'quality': 'high'}
-    user_settings[user_id][key] = value
+    uid = str(user_id)
+    if uid not in user_settings:
+        user_settings[uid] = {'template': 'modern', 'quality': 'high'}
+    user_settings[uid][key] = value
+    _save_json(SETTINGS_FILE, user_settings)
 
 # ============ القوالب ============
 TEMPLATES = {
@@ -406,31 +452,53 @@ class Localization:
 
 # ============ الخطوط ============
 class FontManager:
-    FONT_PATHS = {
-        'ar': '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
-        'en': '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-        'ru': '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-        'tr': '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-        'fr': '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-        'es': '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-        'default': '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-    }
-    
     def __init__(self):
+        # البحث عن الخط العربي في مجلد Noto_Sans_Arabic
+        arabic_font_path = os.path.join(BASE_DIR, "Noto_Sans_Arabic", "static", "NotoSansArabic-Regular.ttf")
+        
+        # البحث عن DejaVuSans من reportlab
+        default_font_path = None
+        try:
+            import reportlab
+            rl_fonts_dir = os.path.join(os.path.dirname(reportlab.__file__), 'fonts')
+            candidate = os.path.join(rl_fonts_dir, 'DejaVuSans.ttf')
+            if os.path.exists(candidate):
+                default_font_path = candidate
+        except Exception:
+            pass
+        
         self.loaded_fonts = {}
-        for lang, path in self.FONT_PATHS.items():
-            if os.path.exists(path):
-                try:
-                    font_name = f'Font_{lang}'
-                    pdfmetrics.registerFont(TTFont(font_name, path))
-                    self.loaded_fonts[lang] = font_name
-                except Exception:
+        
+        # تسجيل الخط العربي
+        if os.path.exists(arabic_font_path):
+            try:
+                pdfmetrics.registerFont(TTFont('Font_ar', arabic_font_path))
+                self.loaded_fonts['ar'] = 'Font_ar'
+                logger.info(f"✅ تحميل الخط العربي: NotoSansArabic-Regular.ttf")
+            except Exception as e:
+                logger.warning(f"⚠️ فشل تحميل الخط العربي: {e}")
+                self.loaded_fonts['ar'] = 'Helvetica'
+        else:
+            logger.warning(f"⚠️ الخط العربي غير موجود: {arabic_font_path}")
+            self.loaded_fonts['ar'] = 'Helvetica'
+        
+        # تسجيل الخط الافتراضي لباقي اللغات
+        if default_font_path and os.path.exists(default_font_path):
+            try:
+                pdfmetrics.registerFont(TTFont('Font_default', default_font_path))
+                for lang in ['en', 'ru', 'tr', 'fr', 'es']:
+                    self.loaded_fonts[lang] = 'Font_default'
+                logger.info(f"✅ تحميل خط DejaVuSans من reportlab")
+            except Exception as e:
+                logger.warning(f"⚠️ فشل تحميل DejaVuSans: {e}")
+                for lang in ['en', 'ru', 'tr', 'fr', 'es']:
                     self.loaded_fonts[lang] = 'Helvetica'
-            else:
+        else:
+            logger.warning("⚠️ DejaVuSans غير موجود، استخدام Helvetica")
+            for lang in ['en', 'ru', 'tr', 'fr', 'es']:
                 self.loaded_fonts[lang] = 'Helvetica'
     
     def get_font(self, lang):
-        # Fallback for unsupported languages to default or English font
         return self.loaded_fonts.get(lang, self.loaded_fonts.get('en', 'Helvetica'))
 
 font_manager = FontManager()
@@ -438,20 +506,16 @@ font_manager = FontManager()
 # ============ فحص العضوية ============
 # Removed: Logic moved to subscription_checker.py
 
-# ============ Ollama ============
-def call_ollama(prompt, system=""):
+# ============ تنظيف الملفات ============
+async def cleanup_file_async(filepath, delay=120):
+    """حذف ملف مؤقت بعد فترة"""
+    await asyncio.sleep(delay)
     try:
-        response = requests.post(OLLAMA_URL, json={
-            "model": MODEL,
-            "prompt": prompt,
-            "system": system,
-            "stream": False
-        }, timeout=30)
-        data = response.json()
-        return data.get("response", prompt)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            logger.info(f"🗑️ Deleted: {filepath}")
     except Exception as e:
-        logger.error(f"Ollama error: {e}")
-        return prompt
+        logger.error(f"Cleanup error: {e}")
 
 # ============ إنشاء PDF من نص (مع لف أسطر وهوامش مضبوطة) ============
 def create_pdf_text(content, chat_id, lang, user_id):
@@ -463,8 +527,6 @@ def create_pdf_text(content, chat_id, lang, user_id):
 
     filename = f"doc_{chat_id}_{int(time.time())}.pdf"
     filepath = os.path.join(PDF_DIR, filename)
-
-    enhanced = call_ollama(content, loc.get('enhance_prompt'))
 
     c = canvas.Canvas(filepath, pagesize=A4)
     width, height = A4
@@ -541,7 +603,7 @@ def create_pdf_text(content, chat_id, lang, user_id):
     draw_page_frame()
     y = height - TOP_MARGIN
 
-    for raw_line in enhanced.split("\n"):
+    for raw_line in content.split("\n"):
         if not raw_line.strip():
             y -= line_height
             if y < BOTTOM_MARGIN:
@@ -669,14 +731,6 @@ def create_pdf_album(image_paths, chat_id, lang, user_id, caption=""):
     logger.info(f"📄 Album: {filepath} ({len(image_paths)} images)")
     return filepath
 
-def cleanup_file(filepath, delay=120):
-    time.sleep(delay)
-    try:
-        if os.path.exists(filepath):
-            os.remove(filepath)
-            logger.info(f"🗑️ Deleted: {filepath}")
-    except Exception as e:
-        logger.error(f"Cleanup error: {e}")
 
 # ============ معالجات البوت ============
 albums = {}
@@ -809,6 +863,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.startswith('/'):
         return
 
+    # فحص طول النص
+    if len(text) > MAX_TEXT_LENGTH:
+        await update.message.reply_text(
+            loc.get('text_too_long', max=MAX_TEXT_LENGTH),
+            parse_mode='Markdown'
+        )
+        return
+
     await acquire_request_slot()
     
     # إظهار حالة الكتابة للمستخدم
@@ -846,7 +908,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='Markdown'
             )
         await processing_msg.delete()
-        threading.Thread(target=cleanup_file, args=(pdf_path, 120)).start()
+        asyncio.create_task(cleanup_file_async(pdf_path, 120))
     except Exception as e:
         await processing_msg.edit_text(loc.get('error', error=str(e)), parse_mode='Markdown')
     finally:
@@ -893,6 +955,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.caption:
         albums[album_key]['caption'] = update.message.caption
 
+    # فحص حجم الألبوم
+    if len(albums[album_key]['images']) > MAX_ALBUM_IMAGES:
+        await update.message.reply_text(
+            loc.get('album_too_large', max=MAX_ALBUM_IMAGES),
+            parse_mode='Markdown'
+        )
+        del albums[album_key]
+        return
+
     if albums[album_key]['timer_task'] and not albums[album_key]['timer_task'].done():
         albums[album_key]['timer_task'].cancel()
 
@@ -936,8 +1007,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await processing_msg.delete()
 
                 for img in image_paths:
-                    threading.Thread(target=cleanup_file, args=(img, 10)).start()
-                threading.Thread(target=cleanup_file, args=(pdf_path, 120)).start()
+                    asyncio.create_task(cleanup_file_async(img, 10))
+                asyncio.create_task(cleanup_file_async(pdf_path, 120))
             except Exception as e:
                 logger.error(f"Error processing album: {e}")
                 await processing_msg.edit_text(loc.get('error', error=str(e)))
@@ -1017,24 +1088,41 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='Markdown'
                 )
             await processing_msg.delete()
-            threading.Thread(target=cleanup_file, args=(pdf_path, 120)).start()
+            asyncio.create_task(cleanup_file_async(pdf_path, 120))
         else:
             await processing_msg.edit_text(loc.get('error', error="Empty file"), parse_mode='Markdown')
 
-        threading.Thread(target=cleanup_file, args=(file_path, 10)).start()
+        asyncio.create_task(cleanup_file_async(file_path, 10))
     except Exception as e:
         await processing_msg.edit_text(loc.get('error', error=str(e)), parse_mode='Markdown')
     finally:
         await release_request_slot()
 
 # ============ التشغيل ============
+async def post_init(application):
+    """
+    تهيئة الموارد التي تتطلب event loop نشط
+    """
+    global request_semaphore
+    
+    # إنشاء Semaphore داخل الـ loop النشط
+    request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    logger.info("✅ Semaphore initialized in active event loop")
+    
+    # التأكد من وجود المجلدات
+    if not os.path.exists(DATA_DIR):
+        os.makedirs(DATA_DIR)
+        logger.info(f"📁 Created data directory: {DATA_DIR}")
+
 def main():
-    logger.info("🚀 Starting PDF Bot Pro v2.0...")
+    logger.info("🚀 Starting PDF Bot Pro v2.2...")
     logger.info(f"📁 PDF Directory: {PDF_DIR}")
+    logger.info(f"📁 Data Directory: {DATA_DIR}")
     logger.info(f"🎨 Templates: {list(TEMPLATES.keys())}")
     logger.info(f"🌍 Languages: {list(TRANSLATIONS.keys())}")
-
-    application = Application.builder().token(TOKEN).build()
+    
+    # استخدام post_init لتهيئة الموارد غير المتزامنة
+    application = Application.builder().token(TOKEN).post_init(post_init).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("settings", settings_command))
@@ -1051,4 +1139,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
