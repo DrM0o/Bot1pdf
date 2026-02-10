@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PDF Bot Pro - Ultimate Version 2.1 (Fixed Membership Check)
+PDF Bot Pro - Ultimate Version 2.2 (Fixed Channel ID)
 يدعم: نصوص | صورة واحدة | مجموعة صور (Album) | TXT | DOCX → PDF
 مع قوالب متعددة وأزرار تفاعلية ودعم 6 لغات
 """
@@ -36,10 +36,17 @@ try:
 except ImportError:
     DOCX_SUPPORTED = False
 
-# ============ إعدادات ============
+# ============ إعدادات هامة جداً ============
 TOKEN = os.getenv("BOT_TOKEN")
-# تأكد أن القناة تبدأ بـ @ في ملف .env، أو سيتم إضافتها تلقائياً في الكود
+
+# --- تصحيح الخطأ هنا: تعيين القناة الصحيحة بشكل افتراضي ---
+# إذا لم يجد القيمة في ملف .env سيستخدم @medbibliotekaa
 TARGET_CHANNEL = os.getenv("TARGET_CHANNEL", "@medbibliotekaa")
+
+# التأكد من أن اسم القناة يبدأ بـ @
+if not TARGET_CHANNEL.startswith("@"):
+    TARGET_CHANNEL = f"@{TARGET_CHANNEL}"
+
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
 MODEL = os.getenv("MODEL", "llama3.2")
 PDF_DIR = "/tmp/pdf-bot-pro"
@@ -59,20 +66,16 @@ active_requests = 0
 request_lock = asyncio.Lock()
 
 async def acquire_request_slot():
-    """الحصول على مكان في طابور التنفيذ"""
     global active_requests
     async with request_lock:
         active_requests += 1
-        logger.info(f"📥 طلب جديد - الطلبات النشطة: {active_requests}")
     await request_semaphore.acquire()
 
 async def release_request_slot():
-    """تحرير مكان في طابور التنفيذ"""
     global active_requests
     request_semaphore.release()
     async with request_lock:
         active_requests -= 1
-        logger.info(f"📤 انتهى طلب - الطلبات النشطة: {active_requests}")
 
 # ============ إحصائيات المستخدمين ============
 user_stats = {}
@@ -80,19 +83,13 @@ user_stats = {}
 def update_stats(user_id, action_type):
     if user_id not in user_stats:
         user_stats[user_id] = {
-            'pdfs': 0,
-            'texts': 0,
-            'images': 0,
-            'files': 0,
+            'pdfs': 0, 'texts': 0, 'images': 0, 'files': 0,
             'joined': datetime.now().isoformat()
         }
     user_stats[user_id][action_type] = user_stats[user_id].get(action_type, 0) + 1
 
 def get_stats(user_id):
-    return user_stats.get(
-        user_id,
-        {'pdfs': 0, 'texts': 0, 'images': 0, 'files': 0}
-    )
+    return user_stats.get(user_id, {'pdfs': 0, 'texts': 0, 'images': 0, 'files': 0})
 
 # ============ اللغات (6 لغات) ============
 TRANSLATIONS = {
@@ -197,8 +194,7 @@ TRANSLATIONS = {
         "high": "🔷 Высокое",
         "medium": "🔶 Среднее",
         "low": "🔸 Низкое"
-    },
-    # (يمكنك إضافة بقية اللغات هنا كما كانت في الملف الأصلي)
+    }
 }
 
 # ============ إعدادات المستخدم ============
@@ -250,7 +246,6 @@ QUALITY_SETTINGS = {
 
 class Localization:
     def __init__(self, lang):
-        # التأكد من وجود اللغة، وإلا استخدام الإنجليزية كافتراضي
         self.lang = lang if lang in TRANSLATIONS else 'en'
     
     def get(self, key, **kwargs):
@@ -290,35 +285,33 @@ class FontManager:
 
 font_manager = FontManager()
 
-# ============ فحص العضوية (تم الإصلاح) ============
+# ============ فحص العضوية (مع الإصلاحات) ============
 async def check_membership(user_id, context):
     try:
-        # 1. التأكد من تنسيق اسم القناة
-        target = TARGET_CHANNEL.strip()
+        # 1. التأكد أن القناة تبدأ بـ @
+        target = TARGET_CHANNEL
         if not target.startswith("@"):
             target = f"@{target}"
         
-        # 2. محاولة جلب حالة العضو
+        # 2. محاولة جلب حالة المستخدم
+        logger.info(f"🔍 Checking membership for user {user_id} in {target}...")
         member = await context.bot.get_chat_member(chat_id=target, user_id=user_id)
         
-        # 3. تسجيل الحالة (للتصحيح والمراقبة)
-        logger.info(f"🔍 Membership Check -> User: {user_id}, Channel: {target}, Status: {member.status}")
+        logger.info(f"👤 Status for {user_id}: {member.status}")
 
-        # 4. قائمة الحالات المقبولة (نصوص وثوابت لضمان التوافق)
-        valid_statuses_str = ["creator", "administrator", "member"]
-        valid_statuses_enum = [ChatMember.OWNER, ChatMember.ADMINISTRATOR, ChatMember.MEMBER]
+        # 3. التحقق من الحالات المسموح بها
+        valid_statuses = ["creator", "administrator", "member"]
         
-        # التحقق مما إذا كانت الحالة موجودة في القوائم المسموحة
-        if member.status in valid_statuses_str or member.status in valid_statuses_enum:
+        # التحقق باستخدام النصوص (للنسخ الحديثة) أو الـ Enums (للنسخ القديمة)
+        if member.status in valid_statuses or \
+           member.status in [ChatMember.OWNER, ChatMember.ADMINISTRATOR, ChatMember.MEMBER]:
             return True
             
-        # إذا كانت الحالة left أو kicked أو restricted
         return False
 
     except Exception as e:
-        logger.error(f"❌ Membership Check Error for {user_id}: {e}")
-        # ملاحظة: هذا الخطأ يظهر غالباً إذا لم يكن البوت مشرفاً في القناة
-        logger.warning(f"⚠️ يرجى التأكد أن البوت مشرف (Admin) في القناة: {TARGET_CHANNEL}")
+        logger.error(f"❌ Membership Check Error: {e}")
+        logger.warning(f"⚠️ هام: تأكد أن البوت مشرف (Admin) في القناة {TARGET_CHANNEL}")
         return False
 
 # ============ Ollama ============
@@ -346,7 +339,6 @@ def create_pdf_text(content, chat_id, lang, user_id):
     filename = f"doc_{chat_id}_{int(time.time())}.pdf"
     filepath = os.path.join(PDF_DIR, filename)
 
-    # تحسين النص باستخدام الذكاء الاصطناعي (اختياري)
     enhanced = call_ollama(content, loc.get('enhance_prompt'))
 
     c = canvas.Canvas(filepath, pagesize=A4)
@@ -372,9 +364,9 @@ def create_pdf_text(content, chat_id, lang, user_id):
         c.setFont("Helvetica-Bold", 46)
         c.translate(width / 2, height / 2)
         c.rotate(45)
+        # هنا سيظهر اسم القناة الصحيحة (@medbibliotekaa)
         c.drawCentredString(0, 0, loc.get('watermark', channel=TARGET_CHANNEL))
         
-        # Doctor Name under watermark
         russian_font = font_manager.get_font('ru')
         try:
             c.setFont(russian_font, 26)
@@ -383,17 +375,14 @@ def create_pdf_text(content, chat_id, lang, user_id):
         c.drawCentredString(0, -55, "Dr Mohammed Dashir")
         c.restoreState()
 
-        # Design Accents
         if settings['template'] in ['modern', 'dark']:
             c.setFillColor(HexColor(template['accent_color']))
             c.rect(0, height - 8, width, 8, fill=True, stroke=False)
 
-        # Header
         c.setFillColor(HexColor(template['header_color']))
         c.setFont("Helvetica-Bold", 20)
         c.drawString(LEFT_MARGIN, height - 50, loc.get('title'))
         
-        # Date and Line
         c.setFont("Helvetica", 10)
         c.setFillColor(HexColor(template['footer_color']))
         c.drawString(LEFT_MARGIN, height - 70, loc.format_date())
@@ -401,7 +390,6 @@ def create_pdf_text(content, chat_id, lang, user_id):
         c.setLineWidth(1.5)
         c.line(LEFT_MARGIN, height - 80, width - RIGHT_MARGIN, height - 80)
 
-        # Footer
         c.setFillColor(HexColor(template['footer_color']))
         c.setFont("Helvetica-Bold", 9)
         c.drawCentredString(width / 2, 35, "© All Rights Reserved - Dr Mohammed Dashir")
@@ -567,6 +555,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = user.language_code or 'en'
     loc = Localization(lang)
 
+    # سيقوم هذا الفحص بالتحقق من القناة @medbibliotekaa حصراً
     if not await check_membership(user.id, context):
         await update.message.reply_text(loc.get('not_member', channel=TARGET_CHANNEL))
         return
@@ -894,15 +883,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ============ التشغيل ============
 def main():
-    logger.info("🚀 Starting PDF Bot Pro v2.1...")
+    logger.info("🚀 Starting PDF Bot Pro v2.2...")
     logger.info(f"📁 PDF Directory: {PDF_DIR}")
-    logger.info(f"🎨 Templates: {list(TEMPLATES.keys())}")
-    logger.info(f"🌍 Languages: {list(TRANSLATIONS.keys())}")
+    logger.info(f"📢 Target Channel: {TARGET_CHANNEL}")  # سيطبع القناة الصحيحة للتأكد
     
-    # تحقق من إعداد القناة
-    if not TARGET_CHANNEL.startswith("@"):
-        logger.warning(f"⚠️ TARGET_CHANNEL '{TARGET_CHANNEL}' does not start with '@'. It will be fixed automatically in checks.")
-
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
@@ -920,3 +904,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
