@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 PDF Bot Pro - Ultimate Version 2.2 (Fixed Channel ID)
-يدعم: نصوص | صورة واحدة | مجموعة صور (Album) | TXT | DOCX → PDF
-مع قوالب متعددة وأزرار تفاعلية ودعم 6 لغات
+ÙŠØ¯Ø¹Ù…: Ù†ØµÙˆØµ | ØµÙˆØ±Ø© ÙˆØ§Ø­Ø¯Ø© | Ù…Ø¬Ù…ÙˆØ¹Ø© ØµÙˆØ± (Album) | TXT | DOCX â†’ PDF
+Ù…Ø¹ Ù‚ÙˆØ§Ù„Ø¨ Ù…ØªØ¹Ø¯Ø¯Ø© ÙˆØ£Ø²Ø±Ø§Ø± ØªÙØ§Ø¹Ù„ÙŠØ© ÙˆØ¯Ø¹Ù… 6 Ù„ØºØ§Øª
 """
 
 import os
@@ -36,15 +36,15 @@ try:
 except ImportError:
     DOCX_SUPPORTED = False
 
-# ============ إعدادات هامة جداً ============
+# ============ Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ù‡Ø§Ù…Ø© Ø¬Ø¯Ø§Ù‹ ============
 TOKEN = os.getenv("BOT_TOKEN")
 
-# --- تصحيح الخطأ هنا: تعيين القناة الصحيحة بشكل افتراضي ---
-# إذا لم يجد القيمة في ملف .env سيستخدم @medbibliotekaa
-TARGET_CHANNEL = os.getenv("TARGET_CHANNEL", "@medbibliotekaa")
-
-# التأكد من أن اسم القناة يبدأ بـ @
-if not TARGET_CHANNEL.startswith("@"):
+# --- ØªØµØ­ÙŠØ­ Ø§Ù„Ø®Ø·Ø£ Ù‡Ù†Ø§: ØªØ¹ÙŠÙŠÙ† Ø§Ù„Ù‚Ù†Ø§Ø© Ø§Ù„ØµØ­ÙŠØ­Ø© Ø¨Ø´ÙƒÙ„ Ø§ÙØªØ±Ø§Ø¶ÙŠ ---
+# Ø¥Ø°Ø§ Ù„Ù… ÙŠØ¬Ø¯ Ø§Ù„Ù‚ÙŠÙ…Ø© ÙÙŠ Ù…Ù„Ù .env Ø³ÙŠØ³ØªØ®Ø¯Ù… @medbibliotekaa
+TARGET_CHANNEL = "@medbibliotekaa"  # forced to avoid hosting ENV override
+# Normalize channel identifier
+TARGET_CHANNEL = TARGET_CHANNEL.strip()
+if not TARGET_CHANNEL.startswith("@") and not TARGET_CHANNEL.startswith("-100"):
     TARGET_CHANNEL = f"@{TARGET_CHANNEL}"
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
@@ -58,8 +58,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+logger.info(f"âœ… TARGET_CHANNEL (runtime): {TARGET_CHANNEL}")
 
-# ============ نظام إدارة الطلبات المتزامنة ============
+# ============ Ù†Ø¸Ø§Ù… Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ù…ØªØ²Ø§Ù…Ù†Ø© ============
 MAX_CONCURRENT_REQUESTS = 10
 request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 active_requests = 0
@@ -77,7 +78,7 @@ async def release_request_slot():
     async with request_lock:
         active_requests -= 1
 
-# ============ إحصائيات المستخدمين ============
+# ============ Ø¥Ø­ØµØ§Ø¦ÙŠØ§Øª Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…ÙŠÙ† ============
 user_stats = {}
 
 def update_stats(user_id, action_type):
@@ -91,113 +92,113 @@ def update_stats(user_id, action_type):
 def get_stats(user_id):
     return user_stats.get(user_id, {'pdfs': 0, 'texts': 0, 'images': 0, 'files': 0})
 
-# ============ اللغات (6 لغات) ============
+# ============ Ø§Ù„Ù„ØºØ§Øª (6 Ù„ØºØ§Øª) ============
 TRANSLATIONS = {
     "ar": {
-        "welcome": "👋 مرحباً {name}!\n\n🤖 **بوت PDF الذكي Pro**\n\n📤 أرسل: نص | صور | ملف TXT | ملف Word\n\n🎨 اختر القالب والجودة من الإعدادات",
-        "received": "📥 **تم استلام طلبك!**\n⏳ جاري المعالجة...",
-        "processing": "🔄 جاري تحويل النص إلى PDF...\n⏱️ يرجى الانتظار",
-        "processing_album": "🔄 جاري معالجة {count} صور...\n⏱️ يرجى الانتظار",
-        "processing_step1": "📝 تحليل المحتوى...",
-        "processing_step2": "🎨 تطبيق التصميم...",
-        "processing_step3": "📄 إنشاء ملف PDF...",
-        "uploading": "📤 جاري رفع الملف إليك...",
-        "success": "✅ **تم بنجاح!**\n📄 ملف PDF جاهز للتحميل",
-        "success_album": "✅ **تم بنجاح!**\n📄 {count} صور في PDF واحد",
-        "error": "❌ **حدث خطأ**\n{error}\n\n🔄 يرجى المحاولة مرة أخرى",
-        "not_member": "🔒 **الاشتراك مطلوب**\n\n📢 اشترك في {channel} أولاً\n✅ ثم عد وأرسل /start",
-        "title": "مستند PDF",
-        "title_album": "ألبوم الصور",
-        "watermark": "© PDF Bot Pro | {channel}",
-        "footer": "تم الإنشاء: {date}",
-        "enhance_prompt": "حسّن هذا النص بالعربية واجعله أكثر وضوحاً",
-        "settings": "⚙️ **الإعدادات**\n\nاختر ما تريد تعديله:",
-        "template_select": "🎨 اختر قالب التصميم:",
-        "quality_select": "📊 اختر جودة PDF:",
-        "template_changed": "✅ تم تغيير القالب إلى: {template}",
-        "quality_changed": "✅ تم تغيير الجودة إلى: {quality}",
-        "stats": "📊 **إحصائياتك**\n\n📄 ملفات PDF: {pdfs}\n📝 نصوص: {texts}\n🖼️ صور: {images}\n📁 ملفات: {files}",
-        "help": "📖 **المساعدة**\n\n/start - بدء البوت\n/settings - الإعدادات\n/stats - إحصائياتك\n/help - المساعدة\n\n📤 **يمكنك إرسال:**\n• نص عادي\n• صورة أو مجموعة صور\n• ملف TXT\n• ملف Word (.docx)",
-        "file_received": "📁 **تم استلام الملف!**\n📁 {filename}\n⏳ جاري التحويل...",
-        "docx_not_supported": "⚠️ دعم ملفات Word غير متوفر، يرجى تثبيت python-docx",
-        "classic": "🎨 كلاسيكي",
-        "modern": "✨ عصري",
-        "dark": "🌙 داكن",
-        "high": "🔷 عالية",
-        "medium": "🔶 متوسطة",
-        "low": "🔸 منخفضة"
+        "welcome": "ðŸ‘‹ Ù…Ø±Ø­Ø¨Ø§Ù‹ {name}!\n\nðŸ¤– **Ø¨ÙˆØª PDF Ø§Ù„Ø°ÙƒÙŠ Pro**\n\nðŸ“¤ Ø£Ø±Ø³Ù„: Ù†Øµ | ØµÙˆØ± | Ù…Ù„Ù TXT | Ù…Ù„Ù Word\n\nðŸŽ¨ Ø§Ø®ØªØ± Ø§Ù„Ù‚Ø§Ù„Ø¨ ÙˆØ§Ù„Ø¬ÙˆØ¯Ø© Ù…Ù† Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª",
+        "received": "ðŸ“¥ **ØªÙ… Ø§Ø³ØªÙ„Ø§Ù… Ø·Ù„Ø¨Ùƒ!**\nâ³ Ø¬Ø§Ø±ÙŠ Ø§Ù„Ù…Ø¹Ø§Ù„Ø¬Ø©...",
+        "processing": "ðŸ”„ Ø¬Ø§Ø±ÙŠ ØªØ­ÙˆÙŠÙ„ Ø§Ù„Ù†Øµ Ø¥Ù„Ù‰ PDF...\nâ±ï¸ ÙŠØ±Ø¬Ù‰ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±",
+        "processing_album": "ðŸ”„ Ø¬Ø§Ø±ÙŠ Ù…Ø¹Ø§Ù„Ø¬Ø© {count} ØµÙˆØ±...\nâ±ï¸ ÙŠØ±Ø¬Ù‰ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±",
+        "processing_step1": "ðŸ“ ØªØ­Ù„ÙŠÙ„ Ø§Ù„Ù…Ø­ØªÙˆÙ‰...",
+        "processing_step2": "ðŸŽ¨ ØªØ·Ø¨ÙŠÙ‚ Ø§Ù„ØªØµÙ…ÙŠÙ…...",
+        "processing_step3": "ðŸ“„ Ø¥Ù†Ø´Ø§Ø¡ Ù…Ù„Ù PDF...",
+        "uploading": "ðŸ“¤ Ø¬Ø§Ø±ÙŠ Ø±ÙØ¹ Ø§Ù„Ù…Ù„Ù Ø¥Ù„ÙŠÙƒ...",
+        "success": "âœ… **ØªÙ… Ø¨Ù†Ø¬Ø§Ø­!**\nðŸ“„ Ù…Ù„Ù PDF Ø¬Ø§Ù‡Ø² Ù„Ù„ØªØ­Ù…ÙŠÙ„",
+        "success_album": "âœ… **ØªÙ… Ø¨Ù†Ø¬Ø§Ø­!**\nðŸ“„ {count} ØµÙˆØ± ÙÙŠ PDF ÙˆØ§Ø­Ø¯",
+        "error": "âŒ **Ø­Ø¯Ø« Ø®Ø·Ø£**\n{error}\n\nðŸ”„ ÙŠØ±Ø¬Ù‰ Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø© Ù…Ø±Ø© Ø£Ø®Ø±Ù‰",
+        "not_member": "ðŸ”’ **Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ Ù…Ø·Ù„ÙˆØ¨**\n\nðŸ“¢ Ø§Ø´ØªØ±Ùƒ ÙÙŠ {channel} Ø£ÙˆÙ„Ø§Ù‹\nâœ… Ø«Ù… Ø¹Ø¯ ÙˆØ£Ø±Ø³Ù„ /start",
+        "title": "Ù…Ø³ØªÙ†Ø¯ PDF",
+        "title_album": "Ø£Ù„Ø¨ÙˆÙ… Ø§Ù„ØµÙˆØ±",
+        "watermark": "Â© PDF Bot Pro | {channel}",
+        "footer": "ØªÙ… Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡: {date}",
+        "enhance_prompt": "Ø­Ø³Ù‘Ù† Ù‡Ø°Ø§ Ø§Ù„Ù†Øµ Ø¨Ø§Ù„Ø¹Ø±Ø¨ÙŠØ© ÙˆØ§Ø¬Ø¹Ù„Ù‡ Ø£ÙƒØ«Ø± ÙˆØ¶ÙˆØ­Ø§Ù‹",
+        "settings": "âš™ï¸ **Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª**\n\nØ§Ø®ØªØ± Ù…Ø§ ØªØ±ÙŠØ¯ ØªØ¹Ø¯ÙŠÙ„Ù‡:",
+        "template_select": "ðŸŽ¨ Ø§Ø®ØªØ± Ù‚Ø§Ù„Ø¨ Ø§Ù„ØªØµÙ…ÙŠÙ…:",
+        "quality_select": "ðŸ“Š Ø§Ø®ØªØ± Ø¬ÙˆØ¯Ø© PDF:",
+        "template_changed": "âœ… ØªÙ… ØªØºÙŠÙŠØ± Ø§Ù„Ù‚Ø§Ù„Ø¨ Ø¥Ù„Ù‰: {template}",
+        "quality_changed": "âœ… ØªÙ… ØªØºÙŠÙŠØ± Ø§Ù„Ø¬ÙˆØ¯Ø© Ø¥Ù„Ù‰: {quality}",
+        "stats": "ðŸ“Š **Ø¥Ø­ØµØ§Ø¦ÙŠØ§ØªÙƒ**\n\nðŸ“„ Ù…Ù„ÙØ§Øª PDF: {pdfs}\nðŸ“ Ù†ØµÙˆØµ: {texts}\nðŸ–¼ï¸ ØµÙˆØ±: {images}\nðŸ“ Ù…Ù„ÙØ§Øª: {files}",
+        "help": "ðŸ“– **Ø§Ù„Ù…Ø³Ø§Ø¹Ø¯Ø©**\n\n/start - Ø¨Ø¯Ø¡ Ø§Ù„Ø¨ÙˆØª\n/settings - Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª\n/stats - Ø¥Ø­ØµØ§Ø¦ÙŠØ§ØªÙƒ\n/help - Ø§Ù„Ù…Ø³Ø§Ø¹Ø¯Ø©\n\nðŸ“¤ **ÙŠÙ…ÙƒÙ†Ùƒ Ø¥Ø±Ø³Ø§Ù„:**\nâ€¢ Ù†Øµ Ø¹Ø§Ø¯ÙŠ\nâ€¢ ØµÙˆØ±Ø© Ø£Ùˆ Ù…Ø¬Ù…ÙˆØ¹Ø© ØµÙˆØ±\nâ€¢ Ù…Ù„Ù TXT\nâ€¢ Ù…Ù„Ù Word (.docx)",
+        "file_received": "ðŸ“ **ØªÙ… Ø§Ø³ØªÙ„Ø§Ù… Ø§Ù„Ù…Ù„Ù!**\nðŸ“ {filename}\nâ³ Ø¬Ø§Ø±ÙŠ Ø§Ù„ØªØ­ÙˆÙŠÙ„...",
+        "docx_not_supported": "âš ï¸ Ø¯Ø¹Ù… Ù…Ù„ÙØ§Øª Word ØºÙŠØ± Ù…ØªÙˆÙØ±ØŒ ÙŠØ±Ø¬Ù‰ ØªØ«Ø¨ÙŠØª python-docx",
+        "classic": "ðŸŽ¨ ÙƒÙ„Ø§Ø³ÙŠÙƒÙŠ",
+        "modern": "âœ¨ Ø¹ØµØ±ÙŠ",
+        "dark": "ðŸŒ™ Ø¯Ø§ÙƒÙ†",
+        "high": "ðŸ”· Ø¹Ø§Ù„ÙŠØ©",
+        "medium": "ðŸ”¶ Ù…ØªÙˆØ³Ø·Ø©",
+        "low": "ðŸ”¸ Ù…Ù†Ø®ÙØ¶Ø©"
     },
     "en": {
-        "welcome": "👋 Hello {name}!\n\n🤖 **AI PDF Bot Pro**\n\n📤 Send: Text | Photos | TXT file | Word file\n\n🎨 Choose template and quality in settings",
-        "received": "📥 **Request received!**\n⏳ Processing...",
-        "processing": "🔄 Converting text to PDF...\n⏱️ Please wait",
-        "processing_album": "🔄 Processing {count} images...\n⏱️ Please wait",
-        "processing_step1": "📝 Analyzing content...",
-        "processing_step2": "🎨 Applying design...",
-        "processing_step3": "📄 Creating PDF file...",
-        "uploading": "📤 Uploading file to you...",
-        "success": "✅ **Success!**\n📄 PDF file is ready to download",
-        "success_album": "✅ **Success!**\n📄 {count} images in one PDF",
-        "error": "❌ **Error occurred**\n{error}\n\n🔄 Please try again",
-        "not_member": "🔒 **Subscription required**\n\n📢 Join {channel} first\n✅ Then come back and send /start",
+        "welcome": "ðŸ‘‹ Hello {name}!\n\nðŸ¤– **AI PDF Bot Pro**\n\nðŸ“¤ Send: Text | Photos | TXT file | Word file\n\nðŸŽ¨ Choose template and quality in settings",
+        "received": "ðŸ“¥ **Request received!**\nâ³ Processing...",
+        "processing": "ðŸ”„ Converting text to PDF...\nâ±ï¸ Please wait",
+        "processing_album": "ðŸ”„ Processing {count} images...\nâ±ï¸ Please wait",
+        "processing_step1": "ðŸ“ Analyzing content...",
+        "processing_step2": "ðŸŽ¨ Applying design...",
+        "processing_step3": "ðŸ“„ Creating PDF file...",
+        "uploading": "ðŸ“¤ Uploading file to you...",
+        "success": "âœ… **Success!**\nðŸ“„ PDF file is ready to download",
+        "success_album": "âœ… **Success!**\nðŸ“„ {count} images in one PDF",
+        "error": "âŒ **Error occurred**\n{error}\n\nðŸ”„ Please try again",
+        "not_member": "ðŸ”’ **Subscription required**\n\nðŸ“¢ Join {channel} first\nâœ… Then come back and send /start",
         "title": "PDF Document",
         "title_album": "Image Album",
-        "watermark": "© PDF Bot Pro | {channel}",
+        "watermark": "Â© PDF Bot Pro | {channel}",
         "footer": "Generated: {date}",
         "enhance_prompt": "Improve this text professionally and make it clearer",
-        "settings": "⚙️ **Settings**\n\nChoose what to modify:",
-        "template_select": "🎨 Choose design template:",
-        "quality_select": "📊 Choose PDF quality:",
-        "template_changed": "✅ Template changed to: {template}",
-        "quality_changed": "✅ Quality changed to: {quality}",
-        "stats": "📊 **Your Statistics**\n\n📄 PDFs: {pdfs}\n📝 Texts: {texts}\n🖼️ Images: {images}\n📁 Files: {files}",
-        "help": "📖 **Help**\n\n/start - Start bot\n/settings - Settings\n/stats - Your stats\n/help - Help\n\n📤 **You can send:**\n• Plain text\n• Photo or album\n• TXT file\n• Word file (.docx)",
-        "file_received": "📁 **File received!**\n📁 {filename}\n⏳ Converting...",
-        "docx_not_supported": "⚠️ Word file support not available, please install python-docx",
-        "classic": "🎨 Classic",
-        "modern": "✨ Modern",
-        "dark": "🌙 Dark",
-        "high": "🔷 High",
-        "medium": "🔶 Medium",
-        "low": "🔸 Low"
+        "settings": "âš™ï¸ **Settings**\n\nChoose what to modify:",
+        "template_select": "ðŸŽ¨ Choose design template:",
+        "quality_select": "ðŸ“Š Choose PDF quality:",
+        "template_changed": "âœ… Template changed to: {template}",
+        "quality_changed": "âœ… Quality changed to: {quality}",
+        "stats": "ðŸ“Š **Your Statistics**\n\nðŸ“„ PDFs: {pdfs}\nðŸ“ Texts: {texts}\nðŸ–¼ï¸ Images: {images}\nðŸ“ Files: {files}",
+        "help": "ðŸ“– **Help**\n\n/start - Start bot\n/settings - Settings\n/stats - Your stats\n/help - Help\n\nðŸ“¤ **You can send:**\nâ€¢ Plain text\nâ€¢ Photo or album\nâ€¢ TXT file\nâ€¢ Word file (.docx)",
+        "file_received": "ðŸ“ **File received!**\nðŸ“ {filename}\nâ³ Converting...",
+        "docx_not_supported": "âš ï¸ Word file support not available, please install python-docx",
+        "classic": "ðŸŽ¨ Classic",
+        "modern": "âœ¨ Modern",
+        "dark": "ðŸŒ™ Dark",
+        "high": "ðŸ”· High",
+        "medium": "ðŸ”¶ Medium",
+        "low": "ðŸ”¸ Low"
     },
     "ru": {
-        "welcome": "👋 Привет {name}!\n\n🤖 **AI PDF Бот Pro**\n\n📤 Отправьте: Текст | Фото | TXT | Word\n\n🎨 Выберите шаблон и качество в настройках",
-        "received": "📥 **Запрос принят!**\n⏳ Обработка...",
-        "processing": "🔄 Конвертация текста в PDF...\n⏱️ Пожалуйста, подождите",
-        "processing_album": "🔄 Обработка {count} изображений...\n⏱️ Пожалуйста, подождите",
-        "processing_step1": "📝 Анализ контента...",
-        "processing_step2": "🎨 Применение дизайна...",
-        "processing_step3": "📄 Создание PDF...",
-        "uploading": "📤 Загрузка файла...",
-        "success": "✅ **Готово!**\n📄 PDF файл готов к скачиванию",
-        "success_album": "✅ **Готово!**\n📄 {count} изображений в одном PDF",
-        "error": "❌ **Ошибка**\n{error}\n\n🔄 Попробуйте снова",
-        "not_member": "🔒 **Требуется подписка**\n\n📢 Подпишитесь на {channel}\n✅ Затем вернитесь и нажмите /start",
-        "title": "PDF Документ",
-        "title_album": "Фотоальбом",
-        "watermark": "© PDF Bot Pro | {channel}",
-        "footer": "Создано: {date}",
-        "enhance_prompt": "Улучши этот текст профессионально на русском языке",
-        "settings": "⚙️ **Настройки**\n\nВыберите что изменить:",
-        "template_select": "🎨 Выберите шаблон:",
-        "quality_select": "📊 Выберите качество PDF:",
-        "template_changed": "✅ Шаблон изменен на: {template}",
-        "quality_changed": "✅ Качество изменено на: {quality}",
-        "stats": "📊 **Ваша статистика**\n\n📄 PDF файлов: {pdfs}\n📝 Текстов: {texts}\n🖼️ Изображений: {images}\n📁 Файлов: {files}",
-        "help": "📖 **Помощь**\n\n/start - Запуск\n/settings - Настройки\n/stats - Статистика\n/help - Помощь",
-        "file_received": "📁 **Файл получен!**\n📁 {filename}\n⏳ Обработка...",
-        "docx_not_supported": "⚠️ Поддержка Word недоступна",
-        "classic": "🎨 Классика",
-        "modern": "✨ Модерн",
-        "dark": "🌙 Тёмный",
-        "high": "🔷 Высокое",
-        "medium": "🔶 Среднее",
-        "low": "🔸 Низкое"
+        "welcome": "ðŸ‘‹ ÐŸÑ€Ð¸Ð²ÐµÑ‚ {name}!\n\nðŸ¤– **AI PDF Ð‘Ð¾Ñ‚ Pro**\n\nðŸ“¤ ÐžÑ‚Ð¿Ñ€Ð°Ð²ÑŒÑ‚Ðµ: Ð¢ÐµÐºÑÑ‚ | Ð¤Ð¾Ñ‚Ð¾ | TXT | Word\n\nðŸŽ¨ Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ ÑˆÐ°Ð±Ð»Ð¾Ð½ Ð¸ ÐºÐ°Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð² Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ°Ñ…",
+        "received": "ðŸ“¥ **Ð—Ð°Ð¿Ñ€Ð¾Ñ Ð¿Ñ€Ð¸Ð½ÑÑ‚!**\nâ³ ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ°...",
+        "processing": "ðŸ”„ ÐšÐ¾Ð½Ð²ÐµÑ€Ñ‚Ð°Ñ†Ð¸Ñ Ñ‚ÐµÐºÑÑ‚Ð° Ð² PDF...\nâ±ï¸ ÐŸÐ¾Ð¶Ð°Ð»ÑƒÐ¹ÑÑ‚Ð°, Ð¿Ð¾Ð´Ð¾Ð¶Ð´Ð¸Ñ‚Ðµ",
+        "processing_album": "ðŸ”„ ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° {count} Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹...\nâ±ï¸ ÐŸÐ¾Ð¶Ð°Ð»ÑƒÐ¹ÑÑ‚Ð°, Ð¿Ð¾Ð´Ð¾Ð¶Ð´Ð¸Ñ‚Ðµ",
+        "processing_step1": "ðŸ“ ÐÐ½Ð°Ð»Ð¸Ð· ÐºÐ¾Ð½Ñ‚ÐµÐ½Ñ‚Ð°...",
+        "processing_step2": "ðŸŽ¨ ÐŸÑ€Ð¸Ð¼ÐµÐ½ÐµÐ½Ð¸Ðµ Ð´Ð¸Ð·Ð°Ð¹Ð½Ð°...",
+        "processing_step3": "ðŸ“„ Ð¡Ð¾Ð·Ð´Ð°Ð½Ð¸Ðµ PDF...",
+        "uploading": "ðŸ“¤ Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ñ„Ð°Ð¹Ð»Ð°...",
+        "success": "âœ… **Ð“Ð¾Ñ‚Ð¾Ð²Ð¾!**\nðŸ“„ PDF Ñ„Ð°Ð¹Ð» Ð³Ð¾Ñ‚Ð¾Ð² Ðº ÑÐºÐ°Ñ‡Ð¸Ð²Ð°Ð½Ð¸ÑŽ",
+        "success_album": "âœ… **Ð“Ð¾Ñ‚Ð¾Ð²Ð¾!**\nðŸ“„ {count} Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹ Ð² Ð¾Ð´Ð½Ð¾Ð¼ PDF",
+        "error": "âŒ **ÐžÑˆÐ¸Ð±ÐºÐ°**\n{error}\n\nðŸ”„ ÐŸÐ¾Ð¿Ñ€Ð¾Ð±ÑƒÐ¹Ñ‚Ðµ ÑÐ½Ð¾Ð²Ð°",
+        "not_member": "ðŸ”’ **Ð¢Ñ€ÐµÐ±ÑƒÐµÑ‚ÑÑ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ°**\n\nðŸ“¢ ÐŸÐ¾Ð´Ð¿Ð¸ÑˆÐ¸Ñ‚ÐµÑÑŒ Ð½Ð° {channel}\nâœ… Ð—Ð°Ñ‚ÐµÐ¼ Ð²ÐµÑ€Ð½Ð¸Ñ‚ÐµÑÑŒ Ð¸ Ð½Ð°Ð¶Ð¼Ð¸Ñ‚Ðµ /start",
+        "title": "PDF Ð”Ð¾ÐºÑƒÐ¼ÐµÐ½Ñ‚",
+        "title_album": "Ð¤Ð¾Ñ‚Ð¾Ð°Ð»ÑŒÐ±Ð¾Ð¼",
+        "watermark": "Â© PDF Bot Pro | {channel}",
+        "footer": "Ð¡Ð¾Ð·Ð´Ð°Ð½Ð¾: {date}",
+        "enhance_prompt": "Ð£Ð»ÑƒÑ‡ÑˆÐ¸ ÑÑ‚Ð¾Ñ‚ Ñ‚ÐµÐºÑÑ‚ Ð¿Ñ€Ð¾Ñ„ÐµÑÑÐ¸Ð¾Ð½Ð°Ð»ÑŒÐ½Ð¾ Ð½Ð° Ñ€ÑƒÑÑÐºÐ¾Ð¼ ÑÐ·Ñ‹ÐºÐµ",
+        "settings": "âš™ï¸ **ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸**\n\nÐ’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ‡Ñ‚Ð¾ Ð¸Ð·Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ:",
+        "template_select": "ðŸŽ¨ Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ ÑˆÐ°Ð±Ð»Ð¾Ð½:",
+        "quality_select": "ðŸ“Š Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ ÐºÐ°Ñ‡ÐµÑÑ‚Ð²Ð¾ PDF:",
+        "template_changed": "âœ… Ð¨Ð°Ð±Ð»Ð¾Ð½ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½ Ð½Ð°: {template}",
+        "quality_changed": "âœ… ÐšÐ°Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¾ Ð½Ð°: {quality}",
+        "stats": "ðŸ“Š **Ð’Ð°ÑˆÐ° ÑÑ‚Ð°Ñ‚Ð¸ÑÑ‚Ð¸ÐºÐ°**\n\nðŸ“„ PDF Ñ„Ð°Ð¹Ð»Ð¾Ð²: {pdfs}\nðŸ“ Ð¢ÐµÐºÑÑ‚Ð¾Ð²: {texts}\nðŸ–¼ï¸ Ð˜Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹: {images}\nðŸ“ Ð¤Ð°Ð¹Ð»Ð¾Ð²: {files}",
+        "help": "ðŸ“– **ÐŸÐ¾Ð¼Ð¾Ñ‰ÑŒ**\n\n/start - Ð—Ð°Ð¿ÑƒÑÐº\n/settings - ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸\n/stats - Ð¡Ñ‚Ð°Ñ‚Ð¸ÑÑ‚Ð¸ÐºÐ°\n/help - ÐŸÐ¾Ð¼Ð¾Ñ‰ÑŒ",
+        "file_received": "ðŸ“ **Ð¤Ð°Ð¹Ð» Ð¿Ð¾Ð»ÑƒÑ‡ÐµÐ½!**\nðŸ“ {filename}\nâ³ ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ°...",
+        "docx_not_supported": "âš ï¸ ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ° Word Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°",
+        "classic": "ðŸŽ¨ ÐšÐ»Ð°ÑÑÐ¸ÐºÐ°",
+        "modern": "âœ¨ ÐœÐ¾Ð´ÐµÑ€Ð½",
+        "dark": "ðŸŒ™ Ð¢Ñ‘Ð¼Ð½Ñ‹Ð¹",
+        "high": "ðŸ”· Ð’Ñ‹ÑÐ¾ÐºÐ¾Ðµ",
+        "medium": "ðŸ”¶ Ð¡Ñ€ÐµÐ´Ð½ÐµÐµ",
+        "low": "ðŸ”¸ ÐÐ¸Ð·ÐºÐ¾Ðµ"
     }
 }
 
-# ============ إعدادات المستخدم ============
+# ============ Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… ============
 user_settings = {}
 
 def get_user_settings(user_id):
@@ -210,7 +211,7 @@ def set_user_setting(user_id, key, value):
         user_settings[user_id] = {'template': 'modern', 'quality': 'high'}
     user_settings[user_id][key] = value
 
-# ============ القوالب ============
+# ============ Ø§Ù„Ù‚ÙˆØ§Ù„Ø¨ ============
 TEMPLATES = {
     'classic': {
         'bg_color': '#FFFFFF',
@@ -255,7 +256,7 @@ class Localization:
     def format_date(self):
         return datetime.now().strftime('%Y-%m-%d %H:%M')
 
-# ============ الخطوط ============
+# ============ Ø§Ù„Ø®Ø·ÙˆØ· ============
 class FontManager:
     FONT_PATHS = {
         'ar': '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
@@ -285,24 +286,24 @@ class FontManager:
 
 font_manager = FontManager()
 
-# ============ فحص العضوية (مع الإصلاحات) ============
+# ============ ÙØ­Øµ Ø§Ù„Ø¹Ø¶ÙˆÙŠØ© (Ù…Ø¹ Ø§Ù„Ø¥ØµÙ„Ø§Ø­Ø§Øª) ============
 async def check_membership(user_id, context):
     try:
-        # 1. التأكد أن القناة تبدأ بـ @
+        # 1. Ø§Ù„ØªØ£ÙƒØ¯ Ø£Ù† Ø§Ù„Ù‚Ù†Ø§Ø© ØªØ¨Ø¯Ø£ Ø¨Ù€ @
         target = TARGET_CHANNEL
         if not target.startswith("@"):
             target = f"@{target}"
         
-        # 2. محاولة جلب حالة المستخدم
-        logger.info(f"🔍 Checking membership for user {user_id} in {target}...")
+        # 2. Ù…Ø­Ø§ÙˆÙ„Ø© Ø¬Ù„Ø¨ Ø­Ø§Ù„Ø© Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…
+        logger.info(f"ðŸ” Checking membership for user {user_id} in {target}...")
         member = await context.bot.get_chat_member(chat_id=target, user_id=user_id)
         
-        logger.info(f"👤 Status for {user_id}: {member.status}")
+        logger.info(f"ðŸ‘¤ Status for {user_id}: {member.status}")
 
-        # 3. التحقق من الحالات المسموح بها
+        # 3. Ø§Ù„ØªØ­Ù‚Ù‚ Ù…Ù† Ø§Ù„Ø­Ø§Ù„Ø§Øª Ø§Ù„Ù…Ø³Ù…ÙˆØ­ Ø¨Ù‡Ø§
         valid_statuses = ["creator", "administrator", "member"]
         
-        # التحقق باستخدام النصوص (للنسخ الحديثة) أو الـ Enums (للنسخ القديمة)
+        # Ø§Ù„ØªØ­Ù‚Ù‚ Ø¨Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„Ù†ØµÙˆØµ (Ù„Ù„Ù†Ø³Ø® Ø§Ù„Ø­Ø¯ÙŠØ«Ø©) Ø£Ùˆ Ø§Ù„Ù€ Enums (Ù„Ù„Ù†Ø³Ø® Ø§Ù„Ù‚Ø¯ÙŠÙ…Ø©)
         if member.status in valid_statuses or \
            member.status in [ChatMember.OWNER, ChatMember.ADMINISTRATOR, ChatMember.MEMBER]:
             return True
@@ -310,8 +311,8 @@ async def check_membership(user_id, context):
         return False
 
     except Exception as e:
-        logger.error(f"❌ Membership Check Error: {e}")
-        logger.warning(f"⚠️ هام: تأكد أن البوت مشرف (Admin) في القناة {TARGET_CHANNEL}")
+        logger.error(f"âŒ Membership Check Error: {e}")
+        logger.warning(f"âš ï¸ Ù‡Ø§Ù…: ØªØ£ÙƒØ¯ Ø£Ù† Ø§Ù„Ø¨ÙˆØª Ù…Ø´Ø±Ù (Admin) ÙÙŠ Ø§Ù„Ù‚Ù†Ø§Ø© {TARGET_CHANNEL}")
         return False
 
 # ============ Ollama ============
@@ -329,7 +330,7 @@ def call_ollama(prompt, system=""):
         logger.error(f"Ollama error: {e}")
         return prompt
 
-# ============ إنشاء PDF من نص ============
+# ============ Ø¥Ù†Ø´Ø§Ø¡ PDF Ù…Ù† Ù†Øµ ============
 def create_pdf_text(content, chat_id, lang, user_id):
     loc = Localization(lang)
     font_name = font_manager.get_font(lang)
@@ -364,7 +365,7 @@ def create_pdf_text(content, chat_id, lang, user_id):
         c.setFont("Helvetica-Bold", 46)
         c.translate(width / 2, height / 2)
         c.rotate(45)
-        # هنا سيظهر اسم القناة الصحيحة (@medbibliotekaa)
+        # Ù‡Ù†Ø§ Ø³ÙŠØ¸Ù‡Ø± Ø§Ø³Ù… Ø§Ù„Ù‚Ù†Ø§Ø© Ø§Ù„ØµØ­ÙŠØ­Ø© (@medbibliotekaa)
         c.drawCentredString(0, 0, loc.get('watermark', channel=TARGET_CHANNEL))
         
         russian_font = font_manager.get_font('ru')
@@ -392,12 +393,12 @@ def create_pdf_text(content, chat_id, lang, user_id):
 
         c.setFillColor(HexColor(template['footer_color']))
         c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(width / 2, 35, "© All Rights Reserved - Dr Mohammed Dashir")
+        c.drawCentredString(width / 2, 35, "Â© All Rights Reserved - Dr Mohammed Dashir")
         c.setFont("Helvetica", 8)
         c.drawCentredString(
             width / 2,
             22,
-            f"{TARGET_CHANNEL} • " + loc.get('footer', date=loc.format_date())
+            f"{TARGET_CHANNEL} â€¢ " + loc.get('footer', date=loc.format_date())
         )
 
         if settings['template'] in ['modern', 'dark']:
@@ -448,7 +449,7 @@ def create_pdf_text(content, chat_id, lang, user_id):
     c.save()
     return filepath
 
-# ============ ألبوم الصور ============
+# ============ Ø£Ù„Ø¨ÙˆÙ… Ø§Ù„ØµÙˆØ± ============
 def create_pdf_album(image_paths, chat_id, lang, user_id, caption=""):
     loc = Localization(lang)
     settings = get_user_settings(user_id)
@@ -523,12 +524,12 @@ def create_pdf_album(image_paths, chat_id, lang, user_id, caption=""):
 
         c.setFillColor(HexColor(template['footer_color']))
         c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(width / 2, 28, "© All Rights Reserved - Dr Mohammed Dashir")
+        c.drawCentredString(width / 2, 28, "Â© All Rights Reserved - Dr Mohammed Dashir")
         c.setFont("Helvetica", 8)
         c.drawCentredString(
             width / 2,
             16,
-            f"{TARGET_CHANNEL} • " + loc.get('footer', date=loc.format_date())
+            f"{TARGET_CHANNEL} â€¢ " + loc.get('footer', date=loc.format_date())
         )
 
         if settings['template'] in ['modern', 'dark']:
@@ -543,11 +544,11 @@ def cleanup_file(filepath, delay=120):
     try:
         if os.path.exists(filepath):
             os.remove(filepath)
-            logger.info(f"🗑️ Deleted: {filepath}")
+            logger.info(f"ðŸ—‘ï¸ Deleted: {filepath}")
     except Exception as e:
         logger.error(f"Cleanup error: {e}")
 
-# ============ معالجات البوت ============
+# ============ Ù…Ø¹Ø§Ù„Ø¬Ø§Øª Ø§Ù„Ø¨ÙˆØª ============
 albums = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -555,7 +556,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = user.language_code or 'en'
     loc = Localization(lang)
 
-    # سيقوم هذا الفحص بالتحقق من القناة @medbibliotekaa حصراً
+    # Ø³ÙŠÙ‚ÙˆÙ… Ù‡Ø°Ø§ Ø§Ù„ÙØ­Øµ Ø¨Ø§Ù„ØªØ­Ù‚Ù‚ Ù…Ù† Ø§Ù„Ù‚Ù†Ø§Ø© @medbibliotekaa Ø­ØµØ±Ø§Ù‹
     if not await check_membership(user.id, context):
         await update.message.reply_text(loc.get('not_member', channel=TARGET_CHANNEL))
         return
@@ -576,8 +577,8 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     keyboard = [
-        [InlineKeyboardButton("🎨 " + loc.get('template_select').replace(':', ''), callback_data="menu_template")],
-        [InlineKeyboardButton("📊 " + loc.get('quality_select').replace(':', ''), callback_data="menu_quality")]
+        [InlineKeyboardButton("ðŸŽ¨ " + loc.get('template_select').replace(':', ''), callback_data="menu_template")],
+        [InlineKeyboardButton("ðŸ“Š " + loc.get('quality_select').replace(':', ''), callback_data="menu_quality")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
@@ -881,11 +882,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         await release_request_slot()
 
-# ============ التشغيل ============
+# ============ Ø§Ù„ØªØ´ØºÙŠÙ„ ============
 def main():
-    logger.info("🚀 Starting PDF Bot Pro v2.2...")
-    logger.info(f"📁 PDF Directory: {PDF_DIR}")
-    logger.info(f"📢 Target Channel: {TARGET_CHANNEL}")  # سيطبع القناة الصحيحة للتأكد
+    logger.info("ðŸš€ Starting PDF Bot Pro v2.2...")
+    logger.info(f"ðŸ“ PDF Directory: {PDF_DIR}")
+    logger.info(f"ðŸ“¢ Target Channel: {TARGET_CHANNEL}")  # Ø³ÙŠØ·Ø¨Ø¹ Ø§Ù„Ù‚Ù†Ø§Ø© Ø§Ù„ØµØ­ÙŠØ­Ø© Ù„Ù„ØªØ£ÙƒØ¯
     
     application = Application.builder().token(TOKEN).build()
 
@@ -899,9 +900,8 @@ def main():
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 
-    logger.info("✅ Bot is running!")
+    logger.info("âœ… Bot is running!")
     application.run_polling()
 
 if __name__ == "__main__":
     main()
-
